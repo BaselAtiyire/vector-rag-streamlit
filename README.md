@@ -1,3 +1,6 @@
+## 🚀 Live Demo
+👉 https://https://vectorrag-ai.streamlit.app/
+
 # 📄 Vector RAG App (Streamlit + ChromaDB)
 
 An end-to-end **Retrieval-Augmented Generation (RAG)** application that lets users upload CSV and PDF documents, perform **semantic search** using vector embeddings, and optionally generate **grounded answers** with an LLM — all through an interactive **Streamlit** web UI.
