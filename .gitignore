@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+
+# Chroma DB
+chroma_db/
+
+# Uploads
+uploads/
+
+# Secrets
+.env
+.streamlit/secrets.toml
+
+# OS
+.DS_Store
