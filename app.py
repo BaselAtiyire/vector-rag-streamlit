@@ -29,9 +29,7 @@ except Exception:
 # -----------------------------
 # Config (Cloud + Local safe)
 # -----------------------------
-# Use repo folder (works on Streamlit Cloud + Windows)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
 DATA_PATH = os.path.join(BASE_DIR, "patient_records.csv")
 UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
 CHROMA_PATH = os.path.join(BASE_DIR, "chroma_db")
@@ -56,8 +54,6 @@ def make_embedding_function():
 
 @st.cache_resource
 def get_client():
-    # NOTE: On Streamlit Cloud, the filesystem may be ephemeral across restarts.
-    # This is fine for demos. For persistent prod storage, use external storage/DB.
     return chromadb.PersistentClient(
         path=CHROMA_PATH,
         settings=Settings(anonymized_telemetry=False),
@@ -86,17 +82,11 @@ def build_context(query_results: dict, max_chars: int = 4000) -> str:
 
 
 def get_groq_api_key() -> Optional[str]:
-    # Streamlit Cloud best practice: use secrets
-    # Settings → Secrets:
-    # GROQ_API_KEY="..."
-    key = None
+    # Streamlit Cloud secrets first
     try:
-        key = st.secrets.get("GROQ_API_KEY", None)
+        return st.secrets.get("GROQ_API_KEY")
     except Exception:
-        key = None
-
-    # Local fallback (optional): environment variable
-    return key or os.getenv("GROQ_API_KEY")
+        return os.getenv("GROQ_API_KEY")
 
 
 def groq_answer(query: str, context: str) -> str:
@@ -112,11 +102,12 @@ def groq_answer(query: str, context: str) -> str:
 
     llm = ChatGroq(
         model="llama-3.1-8b-instant",
-        temperature=0,
+        temperature=0.7,
         groq_api_key=groq_key,
     )
 
-    prompt = f"""You are a careful assistant.
+    prompt = f"""
+You are a careful assistant.
 Use ONLY the context below to answer.
 If the answer is not in the context, say: "I don't have enough information in the provided documents."
 
@@ -133,7 +124,6 @@ Context:
 # Ingestion
 # -----------------------------
 def ingest_csv_reset(client) -> Optional[object]:
-    """Deletes the collection and re-ingests ONLY the CSV."""
     if not os.path.exists(DATA_PATH):
         st.error(
             "CSV not found. Put patient_records.csv in the same folder as app.py "
@@ -141,7 +131,6 @@ def ingest_csv_reset(client) -> Optional[object]:
         )
         return None
 
-    # Reset collection
     try:
         client.delete_collection(COLLECTION_NAME)
     except Exception:
@@ -162,7 +151,6 @@ def ingest_csv_reset(client) -> Optional[object]:
 
 
 def ingest_pdfs_append(client, pdf_paths: List[str]) -> Optional[object]:
-    """Appends PDF chunks to the existing collection."""
     if not pdf_paths:
         return None
 
@@ -264,7 +252,6 @@ with right:
 
         st.write(f"**Matches:** {len(docs)}  |  **Source filter:** {source_filter}")
 
-        # -------- Table view --------
         if show_table:
             if not PANDAS_AVAILABLE:
                 st.warning("pandas is not installed. Add to requirements.txt: pandas")
@@ -272,10 +259,7 @@ with right:
                 rows = []
                 for i, (doc, meta) in enumerate(zip(docs, metas), start=1):
                     meta = meta or {}
-                    preview = doc
-                    if isinstance(doc, str) and len(doc) > 180:
-                        preview = doc[:180] + "…"
-
+                    preview = doc[:180] + "…" if isinstance(doc, str) and len(doc) > 180 else doc
                     rows.append(
                         {
                             "match": i,
@@ -302,10 +286,8 @@ with right:
                         )
                         st.code(docs[idx], language="text")
         else:
-            # -------- Classic expandable list --------
             for i, (doc, meta) in enumerate(zip(docs, metas), start=1):
-                label = f"Match {i} — {meta}"
-                with st.expander(label):
+                with st.expander(f"Match {i} — {meta}"):
                     st.code(doc, language="text")
 
         if use_groq:
