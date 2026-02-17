@@ -27,15 +27,18 @@ except Exception:
 
 
 # -----------------------------
-# Config
+# Config (Cloud + Local safe)
 # -----------------------------
-BASE_DIR = r"C:\Users\basil\OneDrive\Desktop\AIPROJECT\ai-vector-project"
+# Use repo folder (works on Streamlit Cloud + Windows)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 DATA_PATH = os.path.join(BASE_DIR, "patient_records.csv")
 UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
 CHROMA_PATH = os.path.join(BASE_DIR, "chroma_db")
 COLLECTION_NAME = "documents_v1"
 
 os.makedirs(UPLOADS_DIR, exist_ok=True)
+os.makedirs(CHROMA_PATH, exist_ok=True)
 
 st.set_page_config(page_title="Vector Search + RAG (CSV + PDF)", layout="wide")
 
@@ -53,6 +56,8 @@ def make_embedding_function():
 
 @st.cache_resource
 def get_client():
+    # NOTE: On Streamlit Cloud, the filesystem may be ephemeral across restarts.
+    # This is fine for demos. For persistent prod storage, use external storage/DB.
     return chromadb.PersistentClient(
         path=CHROMA_PATH,
         settings=Settings(anonymized_telemetry=False),
@@ -80,13 +85,30 @@ def build_context(query_results: dict, max_chars: int = 4000) -> str:
     return context[:max_chars]
 
 
+def get_groq_api_key() -> Optional[str]:
+    # Streamlit Cloud best practice: use secrets
+    # Settings → Secrets:
+    # GROQ_API_KEY="..."
+    key = None
+    try:
+        key = st.secrets.get("GROQ_API_KEY", None)
+    except Exception:
+        key = None
+
+    # Local fallback (optional): environment variable
+    return key or os.getenv("GROQ_API_KEY")
+
+
 def groq_answer(query: str, context: str) -> str:
-    groq_key = os.getenv("GROQ_API_KEY")
+    groq_key = get_groq_api_key()
     if not groq_key:
-        return "GROQ_API_KEY not found. Set it to enable RAG answer."
+        return (
+            "GROQ_API_KEY not found. Add it in Streamlit Cloud (Settings → Secrets) "
+            "or set it as an environment variable locally."
+        )
 
     if not GROQ_AVAILABLE:
-        return "langchain-groq not installed. Install it with: pip install -U langchain-groq"
+        return "langchain-groq not installed. Add it to requirements.txt: langchain-groq"
 
     llm = ChatGroq(
         model="llama-3.1-8b-instant",
@@ -113,7 +135,10 @@ Context:
 def ingest_csv_reset(client) -> Optional[object]:
     """Deletes the collection and re-ingests ONLY the CSV."""
     if not os.path.exists(DATA_PATH):
-        st.error(f"CSV not found at: {DATA_PATH}")
+        st.error(
+            "CSV not found. Put patient_records.csv in the same folder as app.py "
+            f"(expected: {DATA_PATH})"
+        )
         return None
 
     # Reset collection
@@ -186,7 +211,7 @@ colA, colB = st.columns(2)
 with colA:
     st.metric("Vectors in DB", collection.count())
 with colB:
-    st.code(f"Chroma: {CHROMA_PATH}", language="text")
+    st.code(f"Base: {BASE_DIR}\nChroma: {CHROMA_PATH}", language="text")
 
 st.divider()
 
@@ -219,7 +244,7 @@ with left:
 with right:
     st.subheader("Ask a question")
 
-    st.caption("Tip: for blood pressure, try: 'hypertension', 'high blood pressure', 'hypotension', 'low blood pressure'.")
+    st.caption("Tip: try keywords in your data (e.g., 'hypertension', 'hypotension', 'lab result').")
     query = st.text_input("Question", value="hypertension")
 
     if st.button("🔎 Search"):
@@ -242,7 +267,7 @@ with right:
         # -------- Table view --------
         if show_table:
             if not PANDAS_AVAILABLE:
-                st.warning("pandas is not installed. Install with: pip install -U pandas (then restart Streamlit).")
+                st.warning("pandas is not installed. Add to requirements.txt: pandas")
             else:
                 rows = []
                 for i, (doc, meta) in enumerate(zip(docs, metas), start=1):
