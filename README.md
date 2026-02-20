@@ -1,5 +1,5 @@
 ## 🚀 Live Demo
-👉 https://https://vectorrag-ai.streamlit.app/
+👉 https://vectorrag-ai.streamlit.app/
 
 # 📄 Vector RAG App (Streamlit + ChromaDB)
 
